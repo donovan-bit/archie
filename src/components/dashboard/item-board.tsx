@@ -3,6 +3,7 @@ import { categoryDotClass } from "@/lib/categories";
 import { Card } from "@/components/ui/card";
 import { ItemRowView } from "@/components/dashboard/item-row";
 import { NewItemDialog } from "@/components/dashboard/new-item-dialog";
+import { ImportListDialog } from "@/components/dashboard/import-list-dialog";
 
 export function ItemBoard({
   items,
@@ -24,6 +25,10 @@ export function ItemBoard({
 
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex justify-end">
+        <ImportListDialog periodType={periodType} periodStart={periodStart} />
+      </div>
+
       {groups.map(({ category, items: categoryItems }) => (
         <Card key={category.id}>
           <div className="flex items-center justify-between">
