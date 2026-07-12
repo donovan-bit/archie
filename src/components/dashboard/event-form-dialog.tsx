@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { PlusIcon } from "lucide-react";
 
+import type { CalendarEvent } from "@/lib/google/calendar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +15,10 @@ import {
   DialogFooter,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { createCalendarEventAction } from "@/app/dashboard/actions";
+import {
+  createCalendarEventAction,
+  updateCalendarEventAction,
+} from "@/app/dashboard/actions";
 
 function defaultStart() {
   const d = new Date();
@@ -28,11 +32,21 @@ function toLocalInputValue(date: Date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-export function NewEventDialog() {
+export function EventFormDialog({
+  event,
+  trigger,
+}: {
+  event?: CalendarEvent;
+  trigger?: ReactNode;
+}) {
+  const isEditing = Boolean(event);
   const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState("");
-  const [start, setStart] = useState(() => toLocalInputValue(defaultStart()));
+  const [title, setTitle] = useState(event?.title ?? "");
+  const [start, setStart] = useState(() =>
+    toLocalInputValue(event?.start ? new Date(event.start) : defaultStart()),
+  );
   const [end, setEnd] = useState(() => {
+    if (event?.end) return toLocalInputValue(new Date(event.end));
     const d = defaultStart();
     d.setHours(d.getHours() + 1);
     return toLocalInputValue(d);
@@ -43,12 +57,20 @@ export function NewEventDialog() {
     e.preventDefault();
     if (!title.trim() || !start || !end) return;
     startTransition(async () => {
-      await createCalendarEventAction({
-        title,
-        startIso: new Date(start).toISOString(),
-        endIso: new Date(end).toISOString(),
-      });
-      setTitle("");
+      if (event) {
+        await updateCalendarEventAction(event.id, {
+          title,
+          startIso: new Date(start).toISOString(),
+          endIso: new Date(end).toISOString(),
+        });
+      } else {
+        await createCalendarEventAction({
+          title,
+          startIso: new Date(start).toISOString(),
+          endIso: new Date(end).toISOString(),
+        });
+        setTitle("");
+      }
       setOpen(false);
     });
   }
@@ -56,14 +78,18 @@ export function NewEventDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="sm">
-          <PlusIcon /> Add event
-        </Button>
+        {trigger ?? (
+          <Button type="button" variant="outline" size="sm">
+            <PlusIcon /> Add event
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <DialogHeader>
-            <DialogTitle>New calendar event</DialogTitle>
+            <DialogTitle>
+              {isEditing ? "Edit calendar event" : "New calendar event"}
+            </DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="event-title">Title</Label>
@@ -99,7 +125,13 @@ export function NewEventDialog() {
           </div>
           <DialogFooter>
             <Button type="submit" disabled={isPending}>
-              {isPending ? "Adding…" : "Add event"}
+              {isPending
+                ? isEditing
+                  ? "Saving…"
+                  : "Adding…"
+                : isEditing
+                  ? "Save changes"
+                  : "Add event"}
             </Button>
           </DialogFooter>
         </form>
