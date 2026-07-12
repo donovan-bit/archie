@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useTransition, type ReactNode } from "react";
-import { PlusIcon } from "lucide-react";
+import { useEffect, useState, useTransition } from "react";
 
 import type { CalendarEvent } from "@/lib/google/calendar";
 import { Button } from "@/components/ui/button";
@@ -13,15 +12,15 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   createCalendarEventAction,
+  deleteCalendarEventAction,
   updateCalendarEventAction,
 } from "@/app/dashboard/actions";
 
-function defaultStart() {
-  const d = new Date();
+function roundToNextHour(date: Date) {
+  const d = new Date(date);
   d.setMinutes(0, 0, 0);
   d.setHours(d.getHours() + 1);
   return d;
@@ -33,25 +32,51 @@ function toLocalInputValue(date: Date) {
 }
 
 export function EventFormDialog({
+  open,
+  onOpenChange,
   event,
-  trigger,
+  initialStart,
+  initialEnd,
+  onSaved,
 }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   event?: CalendarEvent;
-  trigger?: ReactNode;
+  initialStart?: Date;
+  initialEnd?: Date;
+  onSaved: () => void;
 }) {
   const isEditing = Boolean(event);
-  const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState(event?.title ?? "");
-  const [start, setStart] = useState(() =>
-    toLocalInputValue(event?.start ? new Date(event.start) : defaultStart()),
-  );
-  const [end, setEnd] = useState(() => {
-    if (event?.end) return toLocalInputValue(new Date(event.end));
-    const d = defaultStart();
-    d.setHours(d.getHours() + 1);
-    return toLocalInputValue(d);
-  });
+  const [title, setTitle] = useState("");
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (!open) return;
+    const timeoutId = setTimeout(() => {
+      setTitle(event?.title ?? "");
+      setStart(
+        toLocalInputValue(
+          event?.start ? new Date(event.start) : (initialStart ?? roundToNextHour(new Date())),
+        ),
+      );
+      setEnd(
+        toLocalInputValue(
+          event?.end
+            ? new Date(event.end)
+            : (initialEnd ??
+                (() => {
+                  const d = roundToNextHour(new Date());
+                  d.setHours(d.getHours() + 1);
+                  return d;
+                })()),
+        ),
+      );
+    }, 0);
+    return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, event?.id]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -69,21 +94,23 @@ export function EventFormDialog({
           startIso: new Date(start).toISOString(),
           endIso: new Date(end).toISOString(),
         });
-        setTitle("");
       }
-      setOpen(false);
+      onOpenChange(false);
+      onSaved();
+    });
+  }
+
+  function handleDelete() {
+    if (!event) return;
+    startTransition(async () => {
+      await deleteCalendarEventAction(event.id);
+      onOpenChange(false);
+      onSaved();
     });
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {trigger ?? (
-          <Button type="button" variant="outline" size="sm">
-            <PlusIcon /> Add event
-          </Button>
-        )}
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <DialogHeader>
@@ -123,7 +150,17 @@ export function EventFormDialog({
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="sm:justify-between">
+            {isEditing && (
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={isPending}
+                onClick={handleDelete}
+              >
+                Delete
+              </Button>
+            )}
             <Button type="submit" disabled={isPending}>
               {isPending
                 ? isEditing
