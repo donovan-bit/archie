@@ -8,6 +8,7 @@ import {
   createCategory,
   createItem,
   deleteItem,
+  listCategories,
   setFocusItem,
   updateItem,
   updateItemStatus,
@@ -18,6 +19,7 @@ import {
   deleteCalendarEvent,
   updateCalendarEvent,
 } from "@/lib/google/calendar";
+import { parseTodoListWithAI } from "@/lib/todo-import";
 
 const periodTypeSchema = z.enum(["day", "week", "month", "quarter", "year"]);
 
@@ -49,6 +51,39 @@ export async function createItemAction(input: {
   });
 
   revalidatePath("/dashboard");
+}
+
+export async function importItemsAction(input: {
+  text: string;
+  periodType: PeriodType;
+  periodStart: string;
+}) {
+  const { dbUser } = await requireUser();
+  const text = input.text.trim();
+  if (!text) return { imported: 0 };
+
+  const periodType = periodTypeSchema.parse(input.periodType);
+  const periodStart = z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .parse(input.periodStart);
+
+  const categories = await listCategories(dbUser.id);
+  const parsedItems = await parseTodoListWithAI(text, categories);
+
+  for (const item of parsedItems) {
+    await createItem({
+      userId: dbUser.id,
+      title: item.title,
+      notes: item.notes,
+      categoryId: item.categoryId ?? undefined,
+      periodType,
+      periodStart,
+    });
+  }
+
+  revalidatePath("/dashboard");
+  return { imported: parsedItems.length };
 }
 
 export async function setItemStatusAction(itemId: string, status: ItemStatus) {

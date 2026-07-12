@@ -35,7 +35,14 @@ The app requests the `.../auth/calendar` scope (full read/write to the
 primary calendar) plus `openid email profile`, with `access_type=offline`
 and `prompt=consent` so a refresh token is always issued.
 
-## 3. Environment variables
+## 3. Anthropic API key (paste-to-organize to-do lists)
+
+Pasting a freeform to-do list into the dashboard and having it split into
+items and sorted into categories is powered by the Claude API. Get a key at
+[console.anthropic.com](https://console.anthropic.com) → API Keys, and set
+it as `ANTHROPIC_API_KEY`. Usage at personal scale costs well under $1/month.
+
+## 4. Environment variables
 
 Copy `.env.example` to `.env.local` and fill in the values described above,
 plus:
@@ -44,7 +51,7 @@ plus:
 - `CRON_SECRET` — any random string; used to authenticate the rollover cron
   request (see below).
 
-## 4. Run locally
+## 5. Run locally
 
 ```bash
 npm install
@@ -53,7 +60,7 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) and sign in with Google.
 
-## 5. Rollover cron
+## 6. Rollover cron
 
 `src/app/api/cron/rollover/route.ts` carries forward any item whose period
 has ended while it was still pending, into the equivalent next period (next
