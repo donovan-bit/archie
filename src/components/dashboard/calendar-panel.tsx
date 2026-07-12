@@ -3,7 +3,7 @@ import { CalendarIcon } from "lucide-react";
 import type { CalendarEvent } from "@/lib/google/calendar";
 import { Card, CardTitle } from "@/components/ui/card";
 import { EventRow } from "@/components/dashboard/event-row";
-import { NewEventDialog } from "@/components/dashboard/new-event-dialog";
+import { EventFormDialog } from "@/components/dashboard/event-form-dialog";
 
 export function CalendarPanel({
   events,
@@ -21,7 +21,7 @@ export function CalendarPanel({
           <CalendarIcon className="size-4" />
           <CardTitle>Calendar</CardTitle>
         </div>
-        {connected && <NewEventDialog />}
+        {connected && <EventFormDialog />}
       </div>
 
       {!connected && (
