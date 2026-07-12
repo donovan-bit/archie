@@ -119,16 +119,3 @@ export function shiftedPeriodStart(
   }
   return periodStartFor(periodType, shifted);
 }
-
-// Australia/Brisbane does not observe daylight saving, so a fixed UTC+10
-// offset is accurate year-round without pulling in an IANA tz database.
-const DEFAULT_TZ_OFFSET = "+10:00";
-
-/** RFC3339 start/end bounds for a period, for querying Google Calendar. */
-export function periodIsoRange(periodType: PeriodType, periodStart: string) {
-  const end = periodEndFor(periodType, periodStart);
-  return {
-    timeMin: `${periodStart}T00:00:00${DEFAULT_TZ_OFFSET}`,
-    timeMax: `${end}T23:59:59${DEFAULT_TZ_OFFSET}`,
-  };
-}

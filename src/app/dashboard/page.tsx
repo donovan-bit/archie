@@ -1,13 +1,14 @@
+import { ChevronDownIcon, ListTodoIcon } from "lucide-react";
+
 import { requireUser } from "@/lib/current-user";
 import { getFocusItem, listCategories, listItemsForPeriod } from "@/lib/items";
-import { listCalendarEvents } from "@/lib/google/calendar";
-import { periodIsoRange, shiftedPeriodStart, PERIOD_TYPES } from "@/lib/dates";
+import { shiftedPeriodStart, PERIOD_TYPES } from "@/lib/dates";
 import type { PeriodType } from "@/lib/supabase/types";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { PeriodNav } from "@/components/dashboard/period-nav";
 import { FocusBeacon } from "@/components/dashboard/focus-beacon";
 import { ItemBoard } from "@/components/dashboard/item-board";
-import { CalendarPanel } from "@/components/dashboard/calendar-panel";
+import { CalendarView } from "@/components/dashboard/calendar-view";
 
 export default async function DashboardPage({
   searchParams,
@@ -29,34 +30,32 @@ export default async function DashboardPage({
     getFocusItem(dbUser.id),
   ]);
 
-  let events: Awaited<ReturnType<typeof listCalendarEvents>> = [];
-  let calendarError: string | null = null;
-
-  if (session.accessToken) {
-    try {
-      const { timeMin, timeMax } = periodIsoRange(periodType, periodStart);
-      events = await listCalendarEvents(session.accessToken, timeMin, timeMax);
-    } catch {
-      calendarError = "Couldn't load Google Calendar events right now.";
-    }
-  }
-
   return (
     <DashboardShell userName={session.user?.name} userEmail={session.user?.email}>
-      <PeriodNav periodType={periodType} offset={offset} periodStart={periodStart} />
       <FocusBeacon item={focusItem} />
-      <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
-        <ItemBoard
-          items={items}
-          categories={categories}
-          periodType={periodType}
-          periodStart={periodStart}
-        />
-        <CalendarPanel
-          events={events}
-          error={calendarError}
-          connected={Boolean(session.accessToken)}
-        />
+      <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
+        <details
+          open
+          className="group h-fit rounded-xl border border-border bg-card"
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-5 text-sm font-semibold marker:hidden [&::-webkit-details-marker]:hidden">
+            <span className="flex items-center gap-2">
+              <ListTodoIcon className="size-4" /> To Do List
+            </span>
+            <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="flex flex-col gap-4 px-5 pb-5">
+            <PeriodNav periodType={periodType} offset={offset} periodStart={periodStart} />
+            <ItemBoard
+              items={items}
+              categories={categories}
+              periodType={periodType}
+              periodStart={periodStart}
+            />
+          </div>
+        </details>
+
+        <CalendarView connected={Boolean(session.accessToken)} initialDate={periodStart} />
       </div>
     </DashboardShell>
   );
