@@ -132,12 +132,12 @@ export async function setItemStatusAction(itemId: string, status: ItemStatus) {
 
 export async function updateItemAction(
   itemId: string,
-  patch: { title?: string; notes?: string; categoryId?: string | null },
+  patch: { title?: string; notes?: string | null; categoryId?: string | null },
 ) {
   const { dbUser } = await requireUser();
   await updateItem(dbUser.id, itemId, {
-    ...(patch.title !== undefined ? { title: patch.title } : {}),
-    ...(patch.notes !== undefined ? { notes: patch.notes } : {}),
+    ...(patch.title !== undefined ? { title: patch.title.trim() } : {}),
+    ...(patch.notes !== undefined ? { notes: patch.notes?.trim() || null } : {}),
     ...(patch.categoryId !== undefined ? { category_id: patch.categoryId } : {}),
   });
   revalidatePath("/dashboard");
