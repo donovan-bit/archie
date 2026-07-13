@@ -1,4 +1,6 @@
-import type { CategoryRow, ItemRow, PeriodType } from "@/lib/supabase/types";
+"use client";
+
+import type { CategoryRow, ItemRow, ItemStatus, PeriodType } from "@/lib/supabase/types";
 import { buildCategoryTree, categoryDotClass } from "@/lib/categories";
 import { Card } from "@/components/ui/card";
 import { ItemRowView } from "@/components/dashboard/item-row";
@@ -6,14 +8,26 @@ import { NewItemDialog } from "@/components/dashboard/new-item-dialog";
 import { ImportListDialog } from "@/components/dashboard/import-list-dialog";
 import { CategoryFormDialog } from "@/components/dashboard/category-form-dialog";
 
-function ItemList({ items }: { items: ItemRow[] }) {
+interface ItemActions {
+  onToggleComplete: (id: string, checked: boolean) => void;
+  onToggleFocus: (item: ItemRow) => void;
+  onDelete: (id: string) => void;
+}
+
+function ItemList({ items, actions }: { items: ItemRow[]; actions: ItemActions }) {
   if (items.length === 0) {
     return <p className="text-sm text-muted-foreground">Nothing here yet.</p>;
   }
   return (
     <div className="flex flex-col divide-y divide-border">
       {items.map((item) => (
-        <ItemRowView key={item.id} item={item} />
+        <ItemRowView
+          key={item.id}
+          item={item}
+          onToggleComplete={(checked) => actions.onToggleComplete(item.id, checked)}
+          onToggleFocus={() => actions.onToggleFocus(item)}
+          onDelete={() => actions.onDelete(item.id)}
+        />
       ))}
     </div>
   );
@@ -24,14 +38,26 @@ export function ItemBoard({
   categories,
   periodType,
   periodStart,
+  onToggleComplete,
+  onToggleFocus,
+  onDelete,
 }: {
   items: ItemRow[];
   categories: CategoryRow[];
   periodType: PeriodType;
   periodStart: string;
+  onToggleComplete: (id: string, status: ItemStatus) => void;
+  onToggleFocus: (item: ItemRow) => void;
+  onDelete: (id: string) => void;
 }) {
   const tree = buildCategoryTree(categories);
   const uncategorized = items.filter((item) => !item.category_id);
+  const actions: ItemActions = {
+    onToggleComplete: (id, checked) =>
+      onToggleComplete(id, checked ? "completed" : "pending"),
+    onToggleFocus,
+    onDelete,
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -42,6 +68,12 @@ export function ItemBoard({
 
       {tree.map(({ category, children }) => {
         const directItems = items.filter((item) => item.category_id === category.id);
+        // Subcategories only show once they actually have something in
+        // them for this period -- created on demand (manually or by the
+        // AI import), not pre-populated as empty placeholders.
+        const visibleChildren = children.filter((sub) =>
+          items.some((item) => item.category_id === sub.id),
+        );
         const allCategoryItems = items.filter(
           (item) =>
             item.category_id === category.id ||
@@ -82,9 +114,9 @@ export function ItemBoard({
               </div>
             </div>
 
-            <ItemList items={directItems} />
+            <ItemList items={directItems} actions={actions} />
 
-            {children.map((sub) => {
+            {visibleChildren.map((sub) => {
               const subItems = items.filter((item) => item.category_id === sub.id);
               return (
                 <div
@@ -110,7 +142,7 @@ export function ItemBoard({
                       }
                     />
                   </div>
-                  <ItemList items={subItems} />
+                  <ItemList items={subItems} actions={actions} />
                 </div>
               );
             })}
@@ -129,7 +161,7 @@ export function ItemBoard({
             categories={categories}
           />
         </div>
-        <ItemList items={uncategorized} />
+        <ItemList items={uncategorized} actions={actions} />
       </Card>
     </div>
   );

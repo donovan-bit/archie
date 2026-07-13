@@ -3,17 +3,17 @@ import { cache } from "react";
 
 import { supabaseAdmin } from "@/lib/supabase/server";
 import type { CategoryRow, ItemRow, ItemStatus, PeriodType } from "@/lib/supabase/types";
-import { periodEndFor, periodStartFor, toDateKey } from "@/lib/dates";
+import { nowInBrisbane, periodEndFor, periodStartFor, toDateKey } from "@/lib/dates";
 
+// No subcategories are pre-seeded -- they're created on demand, either by
+// the user via "+ Subcategory" or by the AI list-import when it spots a
+// real cluster of related items, so a fresh category never shows empty
+// placeholder groups.
 const DEFAULT_CATEGORIES = [
-  {
-    name: "Business",
-    color: "blue",
-    subcategories: ["Archie", "Clinic business", "Clinic admin"],
-  },
-  { name: "Health", color: "green", subcategories: [] },
-  { name: "Family", color: "amber", subcategories: [] },
-  { name: "Personal", color: "violet", subcategories: [] },
+  { name: "Business", color: "blue" },
+  { name: "Health", color: "green" },
+  { name: "Family", color: "amber" },
+  { name: "Personal", color: "violet" },
 ];
 
 export async function upsertAppUser(user: {
@@ -64,35 +64,15 @@ async function ensureDefaultCategories(userId: string) {
   if (countError) throw countError;
   if (count && count > 0) return;
 
-  const { data: topLevel, error } = await db
-    .from("categories")
-    .insert(
-      DEFAULT_CATEGORIES.map((c, i) => ({
-        user_id: userId,
-        name: c.name,
-        color: c.color,
-        sort_order: i,
-      })),
-    )
-    .select();
-  if (error) throw error;
-
-  const subInserts = DEFAULT_CATEGORIES.flatMap((c) => {
-    const parent = topLevel?.find((row) => row.name === c.name);
-    if (!parent) return [];
-    return c.subcategories.map((name, i) => ({
+  const { error } = await db.from("categories").insert(
+    DEFAULT_CATEGORIES.map((c, i) => ({
       user_id: userId,
-      parent_id: parent.id,
-      name,
+      name: c.name,
       color: c.color,
       sort_order: i,
-    }));
-  });
-
-  if (subInserts.length > 0) {
-    const { error: subError } = await db.from("categories").insert(subInserts);
-    if (subError) throw subError;
-  }
+    })),
+  );
+  if (error) throw error;
 }
 
 export async function listCategories(userId: string): Promise<CategoryRow[]> {
@@ -275,7 +255,7 @@ export async function setFocusItem(userId: string, itemId: string | null) {
  * lineage via rolled_over_from_id. Intended to be called once per day by
  * the rollover cron route, across all users.
  */
-export async function rolloverDuePeriods(referenceDate: Date = new Date()) {
+export async function rolloverDuePeriods(referenceDate: Date = nowInBrisbane()) {
   const db = supabaseAdmin();
   const today = toDateKey(referenceDate);
 
