@@ -91,13 +91,44 @@ export function periodLabel(periodType: PeriodType, periodStart: string): string
 
 export const PERIOD_TYPES: PeriodType[] = ["day", "week", "month", "quarter", "year"];
 
+/**
+ * "Now," expressed as a Date whose local getters (getFullYear/getMonth/
+ * getDate, which is what date-fns reads) return Brisbane's current
+ * wall-clock fields -- regardless of what timezone the server process
+ * itself is running in (Vercel's functions run in UTC). Without this,
+ * server-side "today" lags behind Don's actual day for the first ~10
+ * hours of it, since Brisbane (UTC+10, no DST) is that far ahead of UTC.
+ */
+export function nowInBrisbane(): Date {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Australia/Brisbane",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  return new Date(
+    get("year"),
+    get("month") - 1,
+    get("day"),
+    get("hour"),
+    get("minute"),
+    get("second"),
+  );
+}
+
 /** Applies `offset` whole periods (positive or negative) to `from` and
  * returns the resulting period's canonical start. Used for prev/next
  * navigation between periods. */
 export function shiftedPeriodStart(
   periodType: PeriodType,
   offset: number,
-  from: Date = new Date(),
+  from: Date = nowInBrisbane(),
 ): string {
   let shifted: Date;
   switch (periodType) {
