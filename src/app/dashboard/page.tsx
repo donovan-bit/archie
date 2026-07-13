@@ -3,8 +3,7 @@ import { getFocusItem, listCategories, listItemsForPeriod } from "@/lib/items";
 import { shiftedPeriodStart, PERIOD_TYPES } from "@/lib/dates";
 import type { PeriodType } from "@/lib/supabase/types";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
-import { TodoWorkspace } from "@/components/dashboard/todo-workspace";
-import { CalendarView } from "@/components/dashboard/calendar-view";
+import { DashboardContent } from "@/components/dashboard/dashboard-content";
 
 export default async function DashboardPage({
   searchParams,
@@ -28,18 +27,15 @@ export default async function DashboardPage({
 
   return (
     <DashboardShell userName={session.user?.name} userEmail={session.user?.email}>
-      <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
-        <TodoWorkspace
-          initialItems={items}
-          initialFocusItem={focusItem}
-          categories={categories}
-          periodType={periodType}
-          offset={offset}
-          periodStart={periodStart}
-        />
-
-        <CalendarView connected={Boolean(session.accessToken)} initialDate={periodStart} />
-      </div>
+      <DashboardContent
+        initialItems={items}
+        initialFocusItem={focusItem}
+        categories={categories}
+        periodType={periodType}
+        offset={offset}
+        periodStart={periodStart}
+        connected={Boolean(session.accessToken)}
+      />
     </DashboardShell>
   );
 }

@@ -8,6 +8,7 @@ export interface CalendarEvent {
   end: string | null;
   allDay: boolean;
   htmlLink: string | null;
+  colorId: string | null;
 }
 
 function calendarClient(accessToken: string) {
@@ -38,12 +39,13 @@ export async function listCalendarEvents(
     end: event.end?.dateTime ?? event.end?.date ?? null,
     allDay: Boolean(event.start?.date && !event.start?.dateTime),
     htmlLink: event.htmlLink ?? null,
+    colorId: event.colorId ?? null,
   }));
 }
 
 export async function createCalendarEvent(
   accessToken: string,
-  input: { summary: string; start: string; end: string },
+  input: { summary: string; start: string; end: string; colorId?: string | null },
 ) {
   const calendar = calendarClient(accessToken);
   const res = await calendar.events.insert({
@@ -52,6 +54,7 @@ export async function createCalendarEvent(
       summary: input.summary,
       start: { dateTime: input.start },
       end: { dateTime: input.end },
+      ...(input.colorId ? { colorId: input.colorId } : {}),
     },
   });
   return res.data;
@@ -60,7 +63,7 @@ export async function createCalendarEvent(
 export async function updateCalendarEvent(
   accessToken: string,
   eventId: string,
-  input: { summary?: string; start?: string; end?: string },
+  input: { summary?: string; start?: string; end?: string; colorId?: string | null },
 ) {
   const calendar = calendarClient(accessToken);
   const res = await calendar.events.patch({
@@ -70,6 +73,8 @@ export async function updateCalendarEvent(
       ...(input.summary ? { summary: input.summary } : {}),
       ...(input.start ? { start: { dateTime: input.start } } : {}),
       ...(input.end ? { end: { dateTime: input.end } } : {}),
+      // colorId: null means "reset to calendar default" -- Google accepts "" for that.
+      ...(input.colorId !== undefined ? { colorId: input.colorId ?? "" } : {}),
     },
   });
   return res.data;

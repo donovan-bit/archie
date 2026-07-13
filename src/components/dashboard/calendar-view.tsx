@@ -21,7 +21,8 @@ import { CalendarTimeGrid } from "@/components/dashboard/calendar-time-grid";
 import { CalendarMonthGrid } from "@/components/dashboard/calendar-month-grid";
 import { DashboardSection } from "@/components/dashboard/dashboard-section";
 
-type ViewMode = "day" | "week" | "month";
+export type CalendarViewMode = "day" | "week" | "month";
+type ViewMode = CalendarViewMode;
 
 function rangeFor(view: ViewMode, date: Date) {
   if (view === "day") {
@@ -40,11 +41,14 @@ function rangeFor(view: ViewMode, date: Date) {
 export function CalendarView({
   connected,
   initialDate,
+  view,
+  onViewChange,
 }: {
   connected: boolean;
   initialDate: string;
+  view: ViewMode;
+  onViewChange: (view: ViewMode) => void;
 }) {
-  const [view, setView] = useState<ViewMode>("day");
   const [currentDate, setCurrentDate] = useState(() => new Date(`${initialDate}T00:00:00`));
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(false);
@@ -108,7 +112,6 @@ export function CalendarView({
       title="Calendar"
       icon={<CalendarIcon className="size-4" />}
       defaultOpen
-      className={view !== "day" ? "lg:col-span-2" : undefined}
     >
       {!connected && (
         <p className="text-sm text-muted-foreground">
@@ -121,28 +124,42 @@ export function CalendarView({
         <>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon" onClick={goPrev} aria-label="Previous">
-                <ChevronLeftIcon />
-              </Button>
-              <Button variant="outline" size="icon" onClick={goNext} aria-label="Next">
-                <ChevronRightIcon />
-              </Button>
-              <Button variant="ghost" size="sm" onClick={goToday}>
+              <Button variant="outline" size="sm" onClick={goToday} className="rounded-full">
                 Today
               </Button>
-              <span className="ml-1 text-sm font-medium">{label}</span>
+              <div className="flex items-center">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={goPrev}
+                  aria-label="Previous"
+                  className="rounded-full text-muted-foreground hover:text-foreground"
+                >
+                  <ChevronLeftIcon />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={goNext}
+                  aria-label="Next"
+                  className="rounded-full text-muted-foreground hover:text-foreground"
+                >
+                  <ChevronRightIcon />
+                </Button>
+              </div>
+              <span className="ml-1 text-base font-normal text-foreground">{label}</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="inline-flex h-8 items-center rounded-lg bg-muted p-1">
+              <div className="inline-flex h-8 items-center rounded-full border border-border p-0.5">
                 {(["day", "week", "month"] as ViewMode[]).map((v) => (
                   <button
                     key={v}
                     type="button"
-                    onClick={() => setView(v)}
+                    onClick={() => onViewChange(v)}
                     className={cn(
-                      "rounded-md px-2.5 py-1 text-xs font-medium capitalize transition-colors",
+                      "rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors",
                       v === view
-                        ? "bg-background text-foreground shadow-sm"
+                        ? "bg-foreground text-background"
                         : "text-muted-foreground hover:text-foreground",
                     )}
                   >
@@ -152,8 +169,8 @@ export function CalendarView({
               </div>
               <Button
                 type="button"
-                variant="outline"
                 size="sm"
+                className="rounded-full bg-[#1a73e8] text-white hover:bg-[#1a73e8] hover:opacity-90"
                 onClick={() => {
                   const s = new Date();
                   s.setMinutes(0, 0, 0);
@@ -163,7 +180,7 @@ export function CalendarView({
                   setDialogState({ mode: "create", start: s, end: e });
                 }}
               >
-                <PlusIcon /> Add
+                <PlusIcon /> Create
               </Button>
             </div>
           </div>
@@ -181,7 +198,7 @@ export function CalendarView({
               events={events}
               onSelectDay={(day) => {
                 setCurrentDate(day);
-                setView("day");
+                onViewChange("day");
               }}
               onEventClick={(event) => setDialogState({ mode: "edit", event })}
             />

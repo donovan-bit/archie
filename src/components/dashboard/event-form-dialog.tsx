@@ -3,6 +3,8 @@
 import { useEffect, useState, useTransition } from "react";
 
 import type { CalendarEvent } from "@/lib/google/calendar";
+import { DEFAULT_EVENT_COLOR, EVENT_COLORS } from "@/lib/google/event-colors";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,12 +52,14 @@ export function EventFormDialog({
   const [title, setTitle] = useState("");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
+  const [colorId, setColorId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
     if (!open) return;
     const timeoutId = setTimeout(() => {
       setTitle(event?.title ?? "");
+      setColorId(event?.colorId ?? null);
       setStart(
         toLocalInputValue(
           event?.start ? new Date(event.start) : (initialStart ?? roundToNextHour(new Date())),
@@ -87,12 +91,14 @@ export function EventFormDialog({
           title,
           startIso: new Date(start).toISOString(),
           endIso: new Date(end).toISOString(),
+          colorId,
         });
       } else {
         await createCalendarEventAction({
           title,
           startIso: new Date(start).toISOString(),
           endIso: new Date(end).toISOString(),
+          colorId,
         });
       }
       onOpenChange(false);
@@ -148,6 +154,36 @@ export function EventFormDialog({
                 onChange={(e) => setEnd(e.target.value)}
                 required
               />
+            </div>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Colour</Label>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                aria-label={DEFAULT_EVENT_COLOR.name}
+                title={DEFAULT_EVENT_COLOR.name}
+                onClick={() => setColorId(null)}
+                style={{ backgroundColor: DEFAULT_EVENT_COLOR.bg }}
+                className={cn(
+                  "size-6 rounded-full ring-offset-2 ring-offset-background transition-shadow",
+                  colorId === null ? "ring-2 ring-ring" : "hover:ring-2 hover:ring-border",
+                )}
+              />
+              {EVENT_COLORS.map((color) => (
+                <button
+                  key={color.id}
+                  type="button"
+                  aria-label={color.name}
+                  title={color.name}
+                  onClick={() => setColorId(color.id)}
+                  style={{ backgroundColor: color.bg }}
+                  className={cn(
+                    "size-6 rounded-full ring-offset-2 ring-offset-background transition-shadow",
+                    colorId === color.id ? "ring-2 ring-ring" : "hover:ring-2 hover:ring-border",
+                  )}
+                />
+              ))}
             </div>
           </div>
           <DialogFooter className="sm:justify-between">

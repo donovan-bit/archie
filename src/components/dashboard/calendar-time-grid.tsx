@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { format, isSameDay, isToday } from "date-fns";
 
 import type { CalendarEvent } from "@/lib/google/calendar";
+import { getEventColor } from "@/lib/google/event-colors";
 import { cn } from "@/lib/utils";
 
 const HOUR_HEIGHT = 48;
@@ -70,10 +71,18 @@ export function CalendarTimeGrid({
               key={day.toISOString()}
               className={cn(
                 "border-l border-border px-2 py-1.5 text-center text-xs font-medium",
-                isToday(day) && "bg-accent text-accent-foreground",
+                isToday(day) && "text-[#1a73e8]",
               )}
             >
-              {format(day, "EEE d")}
+              {format(day, "EEE")}{" "}
+              <span
+                className={cn(
+                  "inline-flex size-5 items-center justify-center rounded-full",
+                  isToday(day) && "bg-[#1a73e8] font-semibold text-white",
+                )}
+              >
+                {format(day, "d")}
+              </span>
             </div>
           ))}
         </div>
@@ -89,16 +98,20 @@ export function CalendarTimeGrid({
             >
               {allDayEvents
                 .filter((e) => e.start && isSameDay(new Date(e.start), day))
-                .map((e) => (
-                  <button
-                    key={e.id}
-                    type="button"
-                    onClick={() => onEventClick(e)}
-                    className="truncate rounded bg-primary/15 px-1.5 py-0.5 text-left text-[11px] font-medium text-primary hover:bg-primary/25"
-                  >
-                    {e.title}
-                  </button>
-                ))}
+                .map((e) => {
+                  const color = getEventColor(e.colorId);
+                  return (
+                    <button
+                      key={e.id}
+                      type="button"
+                      onClick={() => onEventClick(e)}
+                      style={{ backgroundColor: color.bg, color: color.fg }}
+                      className="truncate rounded px-1.5 py-0.5 text-left text-[11px] font-medium hover:opacity-90"
+                    >
+                      {e.title}
+                    </button>
+                  );
+                })}
             </div>
           ))}
         </div>
@@ -154,6 +167,7 @@ export function CalendarTimeGrid({
                     18,
                   );
                   const widthPct = 100 / laneCount;
+                  const color = getEventColor(event.colorId);
 
                   return (
                     <button
@@ -168,8 +182,10 @@ export function CalendarTimeGrid({
                         height,
                         left: `${lane * widthPct}%`,
                         width: `${widthPct}%`,
+                        backgroundColor: color.bg,
+                        color: color.fg,
                       }}
-                      className="absolute z-10 overflow-hidden rounded-md bg-primary px-1.5 py-0.5 text-left text-[11px] font-medium text-primary-foreground shadow-sm hover:opacity-90"
+                      className="absolute z-10 overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] font-medium shadow-sm hover:opacity-90"
                     >
                       <span className="block truncate">{event.title}</span>
                     </button>
@@ -178,9 +194,12 @@ export function CalendarTimeGrid({
 
                 {nowTop !== null && (
                   <div
-                    className="pointer-events-none absolute inset-x-0 z-20 border-t-2 border-focus"
+                    className="pointer-events-none absolute inset-x-0 z-20 flex items-center"
                     style={{ top: (nowTop / 60) * HOUR_HEIGHT }}
-                  />
+                  >
+                    <div className="-ml-1 size-2.5 rounded-full bg-[#ea4335]" />
+                    <div className="h-0.5 flex-1 bg-[#ea4335]" />
+                  </div>
                 )}
               </div>
             );

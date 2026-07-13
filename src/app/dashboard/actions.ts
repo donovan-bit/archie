@@ -171,6 +171,7 @@ export async function createCalendarEventAction(input: {
   title: string;
   startIso: string;
   endIso: string;
+  colorId?: string | null;
 }) {
   const { session } = await requireUser();
   if (!session.accessToken) {
@@ -180,13 +181,14 @@ export async function createCalendarEventAction(input: {
     summary: input.title,
     start: input.startIso,
     end: input.endIso,
+    colorId: input.colorId,
   });
   revalidatePath("/dashboard");
 }
 
 export async function updateCalendarEventAction(
   eventId: string,
-  input: { title?: string; startIso?: string; endIso?: string },
+  input: { title?: string; startIso?: string; endIso?: string; colorId?: string | null },
 ) {
   const { session } = await requireUser();
   if (!session.accessToken) {
@@ -196,6 +198,7 @@ export async function updateCalendarEventAction(
     summary: input.title,
     start: input.startIso,
     end: input.endIso,
+    colorId: input.colorId,
   });
   revalidatePath("/dashboard");
 }
