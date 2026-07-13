@@ -117,11 +117,15 @@ export async function setFocusAction(itemId: string | null) {
   revalidatePath("/dashboard");
 }
 
-export async function createCategoryAction(name: string, color: string) {
+export async function createCategoryAction(
+  name: string,
+  color: string,
+  parentId?: string | null,
+) {
   const { dbUser } = await requireUser();
   const trimmed = name.trim();
   if (!trimmed) return;
-  await createCategory(dbUser.id, trimmed, color);
+  await createCategory(dbUser.id, trimmed, color, parentId ?? null);
   revalidatePath("/dashboard");
 }
 

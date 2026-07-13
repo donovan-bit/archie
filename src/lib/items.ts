@@ -5,10 +5,14 @@ import type { CategoryRow, ItemRow, ItemStatus, PeriodType } from "@/lib/supabas
 import { periodEndFor, periodStartFor, toDateKey } from "@/lib/dates";
 
 const DEFAULT_CATEGORIES = [
-  { name: "Business", color: "blue" },
-  { name: "Health", color: "green" },
-  { name: "Family", color: "amber" },
-  { name: "Personal", color: "violet" },
+  {
+    name: "Business",
+    color: "blue",
+    subcategories: ["Archie", "Clinic business", "Clinic admin"],
+  },
+  { name: "Health", color: "green", subcategories: [] },
+  { name: "Family", color: "amber", subcategories: [] },
+  { name: "Personal", color: "violet", subcategories: [] },
 ];
 
 export async function upsertAppUser(user: {
@@ -53,15 +57,35 @@ async function ensureDefaultCategories(userId: string) {
   if (countError) throw countError;
   if (count && count > 0) return;
 
-  const { error } = await db.from("categories").insert(
-    DEFAULT_CATEGORIES.map((c, i) => ({
+  const { data: topLevel, error } = await db
+    .from("categories")
+    .insert(
+      DEFAULT_CATEGORIES.map((c, i) => ({
+        user_id: userId,
+        name: c.name,
+        color: c.color,
+        sort_order: i,
+      })),
+    )
+    .select();
+  if (error) throw error;
+
+  const subInserts = DEFAULT_CATEGORIES.flatMap((c) => {
+    const parent = topLevel?.find((row) => row.name === c.name);
+    if (!parent) return [];
+    return c.subcategories.map((name, i) => ({
       user_id: userId,
-      name: c.name,
+      parent_id: parent.id,
+      name,
       color: c.color,
       sort_order: i,
-    })),
-  );
-  if (error) throw error;
+    }));
+  });
+
+  if (subInserts.length > 0) {
+    const { error: subError } = await db.from("categories").insert(subInserts);
+    if (subError) throw subError;
+  }
 }
 
 export async function listCategories(userId: string): Promise<CategoryRow[]> {
@@ -75,15 +99,29 @@ export async function listCategories(userId: string): Promise<CategoryRow[]> {
   return data ?? [];
 }
 
-export async function createCategory(userId: string, name: string, color: string) {
+export async function createCategory(
+  userId: string,
+  name: string,
+  color: string,
+  parentId?: string | null,
+) {
   const db = supabaseAdmin();
-  const { count } = await db
+  const countQuery = db
     .from("categories")
     .select("id", { count: "exact", head: true })
     .eq("user_id", userId);
+  const { count } = await (parentId
+    ? countQuery.eq("parent_id", parentId)
+    : countQuery.is("parent_id", null));
   const { data, error } = await db
     .from("categories")
-    .insert({ user_id: userId, name, color, sort_order: count ?? 0 })
+    .insert({
+      user_id: userId,
+      name,
+      color,
+      parent_id: parentId ?? null,
+      sort_order: count ?? 0,
+    })
     .select()
     .single();
   if (error) throw error;

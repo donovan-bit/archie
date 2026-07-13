@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useTransition, type ReactNode } from "react";
+import { Fragment, useState, useTransition, type ReactNode } from "react";
 import { PlusIcon } from "lucide-react";
 
 import type { CategoryRow, PeriodType } from "@/lib/supabase/types";
+import { buildCategoryTree } from "@/lib/categories";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -104,10 +105,15 @@ export function NewItemDialog({
                   <SelectValue placeholder="No category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {categories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
+                  {buildCategoryTree(categories).map(({ category, children }) => (
+                    <Fragment key={category.id}>
+                      <SelectItem value={category.id}>{category.name}</SelectItem>
+                      {children.map((sub) => (
+                        <SelectItem key={sub.id} value={sub.id}>
+                          &nbsp;&nbsp;{sub.name}
+                        </SelectItem>
+                      ))}
+                    </Fragment>
                   ))}
                 </SelectContent>
               </Select>
