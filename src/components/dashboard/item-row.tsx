@@ -2,18 +2,21 @@
 
 import { StarIcon, Trash2Icon } from "lucide-react";
 
-import type { ItemRow } from "@/lib/supabase/types";
+import type { CategoryRow, ItemRow } from "@/lib/supabase/types";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
+import { EditItemDialog } from "@/components/dashboard/edit-item-dialog";
 
 export function ItemRowView({
   item,
+  categories,
   onToggleComplete,
   onToggleFocus,
   onDelete,
 }: {
   item: ItemRow;
+  categories: CategoryRow[];
   onToggleComplete: (checked: boolean) => void;
   onToggleFocus: () => void;
   onDelete: () => void;
@@ -51,6 +54,7 @@ export function ItemRowView({
           )}
         />
       </button>
+      <EditItemDialog item={item} categories={categories} />
       <Button
         type="button"
         variant="ghost"

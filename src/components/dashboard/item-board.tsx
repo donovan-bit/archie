@@ -18,16 +18,29 @@ interface ItemActions {
   onDelete: (id: string) => void;
 }
 
-function ItemList({ items, actions }: { items: ItemRow[]; actions: ItemActions }) {
+function ItemList({
+  items,
+  categories,
+  actions,
+}: {
+  items: ItemRow[];
+  categories: CategoryRow[];
+  actions: ItemActions;
+}) {
   if (items.length === 0) {
     return <p className="text-sm text-muted-foreground">Nothing here yet.</p>;
   }
+  // Completed items sink to the bottom; otherwise keep original order.
+  const sorted = [...items].sort(
+    (a, b) => Number(a.status === "completed") - Number(b.status === "completed"),
+  );
   return (
     <div className="flex flex-col divide-y divide-border">
-      {items.map((item) => (
+      {sorted.map((item) => (
         <ItemRowView
           key={item.id}
           item={item}
+          categories={categories}
           onToggleComplete={(checked) => actions.onToggleComplete(item.id, checked)}
           onToggleFocus={() => actions.onToggleFocus(item)}
           onDelete={() => actions.onDelete(item.id)}
@@ -87,7 +100,7 @@ function SubcategorySection({
           }
         />
       </div>
-      {!collapsed && <ItemList items={items} actions={actions} />}
+      {!collapsed && <ItemList items={items} categories={categories} actions={actions} />}
     </div>
   );
 }
@@ -173,7 +186,7 @@ export function ItemBoard({
               </div>
             </div>
 
-            <ItemList items={directItems} actions={actions} />
+            <ItemList items={directItems} categories={categories} actions={actions} />
 
             {visibleChildren.map((sub) => (
               <SubcategorySection
@@ -202,7 +215,7 @@ export function ItemBoard({
             categories={categories}
           />
         </div>
-        <ItemList items={uncategorized} actions={actions} />
+        <ItemList items={uncategorized} categories={categories} actions={actions} />
       </Card>
     </div>
   );
