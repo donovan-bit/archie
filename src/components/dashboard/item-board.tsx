@@ -1,7 +1,11 @@
 "use client";
 
+import { useState } from "react";
+import { ChevronDownIcon } from "lucide-react";
+
 import type { CategoryRow, ItemRow, ItemStatus, PeriodType } from "@/lib/supabase/types";
 import { buildCategoryTree, categoryDotClass } from "@/lib/categories";
+import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { ItemRowView } from "@/components/dashboard/item-row";
 import { NewItemDialog } from "@/components/dashboard/new-item-dialog";
@@ -29,6 +33,61 @@ function ItemList({ items, actions }: { items: ItemRow[]; actions: ItemActions }
           onDelete={() => actions.onDelete(item.id)}
         />
       ))}
+    </div>
+  );
+}
+
+function SubcategorySection({
+  name,
+  items,
+  actions,
+  periodType,
+  periodStart,
+  categories,
+  categoryId,
+}: {
+  name: string;
+  items: ItemRow[];
+  actions: ItemActions;
+  periodType: PeriodType;
+  periodStart: string;
+  categories: CategoryRow[];
+  categoryId: string;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  return (
+    <div className="flex flex-col gap-2 border-l-2 border-border pl-3">
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => setCollapsed((c) => !c)}
+          className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground"
+        >
+          <ChevronDownIcon
+            className={cn("size-3.5 transition-transform", !collapsed && "rotate-180")}
+          />
+          {name}
+          <span className="font-normal">
+            {items.filter((i) => i.status === "completed").length}/{items.length}
+          </span>
+        </button>
+        <NewItemDialog
+          periodType={periodType}
+          periodStart={periodStart}
+          categories={categories}
+          defaultCategoryId={categoryId}
+          trigger={
+            <button
+              type="button"
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              + Add
+            </button>
+          }
+        />
+      </div>
+      {!collapsed && <ItemList items={items} actions={actions} />}
     </div>
   );
 }
@@ -116,36 +175,18 @@ export function ItemBoard({
 
             <ItemList items={directItems} actions={actions} />
 
-            {visibleChildren.map((sub) => {
-              const subItems = items.filter((item) => item.category_id === sub.id);
-              return (
-                <div
-                  key={sub.id}
-                  className="flex flex-col gap-2 border-l-2 border-border pl-3"
-                >
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-semibold text-muted-foreground">
-                      {sub.name}
-                    </h3>
-                    <NewItemDialog
-                      periodType={periodType}
-                      periodStart={periodStart}
-                      categories={categories}
-                      defaultCategoryId={sub.id}
-                      trigger={
-                        <button
-                          type="button"
-                          className="text-xs text-muted-foreground hover:text-foreground"
-                        >
-                          + Add
-                        </button>
-                      }
-                    />
-                  </div>
-                  <ItemList items={subItems} actions={actions} />
-                </div>
-              );
-            })}
+            {visibleChildren.map((sub) => (
+              <SubcategorySection
+                key={sub.id}
+                name={sub.name}
+                items={items.filter((item) => item.category_id === sub.id)}
+                actions={actions}
+                periodType={periodType}
+                periodStart={periodStart}
+                categories={categories}
+                categoryId={sub.id}
+              />
+            ))}
           </Card>
         );
       })}
