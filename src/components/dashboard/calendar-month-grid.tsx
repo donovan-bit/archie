@@ -3,6 +3,7 @@
 import { eachDayOfInterval, format, isSameDay, isSameMonth, isToday } from "date-fns";
 
 import type { CalendarEvent } from "@/lib/google/calendar";
+import { getEventColor } from "@/lib/google/event-colors";
 import { cn } from "@/lib/utils";
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -31,7 +32,7 @@ export function CalendarMonthGrid({
         {WEEKDAY_LABELS.map((label) => (
           <div
             key={label}
-            className="px-2 py-1.5 text-center text-xs font-medium text-muted-foreground"
+            className="px-2 py-1.5 text-center text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
           >
             {label}
           </div>
@@ -59,33 +60,37 @@ export function CalendarMonthGrid({
             >
               <span
                 className={cn(
-                  "inline-flex size-5 items-center justify-center rounded-full text-xs",
-                  isToday(day) && "bg-focus font-semibold text-focus-foreground",
+                  "inline-flex size-6 items-center justify-center rounded-full text-xs",
+                  isToday(day) && "bg-[#1a73e8] font-semibold text-white",
                 )}
               >
                 {format(day, "d")}
               </span>
               <div className="flex flex-col gap-0.5">
-                {visible.map((event) => (
-                  <span
-                    key={event.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEventClick(event);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
+                {visible.map((event) => {
+                  const color = getEventColor(event.colorId);
+                  return (
+                    <span
+                      key={event.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => {
                         e.stopPropagation();
                         onEventClick(event);
-                      }
-                    }}
-                    className="truncate rounded bg-primary/15 px-1 py-0.5 text-[10px] font-medium text-primary hover:bg-primary/25"
-                  >
-                    {event.title}
-                  </span>
-                ))}
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.stopPropagation();
+                          onEventClick(event);
+                        }
+                      }}
+                      style={{ backgroundColor: color.bg, color: color.fg }}
+                      className="truncate rounded px-1 py-0.5 text-[10px] font-medium hover:opacity-90"
+                    >
+                      {event.title}
+                    </span>
+                  );
+                })}
                 {overflow > 0 && (
                   <span className="px-1 text-[10px] text-muted-foreground">
                     +{overflow} more
