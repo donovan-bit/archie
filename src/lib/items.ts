@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 
 import { supabaseAdmin } from "@/lib/supabase/server";
 import type { CategoryRow, ItemRow, ItemStatus, PeriodType } from "@/lib/supabase/types";
@@ -37,7 +38,13 @@ export async function upsertAppUser(user: {
   return data;
 }
 
-export async function getUserByEmail(email: string) {
+/**
+ * Wrapped in React's cache() so repeated calls with the same email within a
+ * single request (a Server Action mutation followed by the page re-render
+ * that revalidatePath triggers as part of the same response) reuse one
+ * Supabase round trip instead of two.
+ */
+export const getUserByEmail = cache(async (email: string) => {
   const db = supabaseAdmin();
   const { data, error } = await db
     .from("app_users")
@@ -46,7 +53,7 @@ export async function getUserByEmail(email: string) {
     .maybeSingle();
   if (error) throw error;
   return data;
-}
+});
 
 async function ensureDefaultCategories(userId: string) {
   const db = supabaseAdmin();

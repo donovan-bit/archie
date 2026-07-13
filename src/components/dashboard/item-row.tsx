@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useOptimistic, useTransition } from "react";
 import { StarIcon, Trash2Icon } from "lucide-react";
 
 import type { ItemRow } from "@/lib/supabase/types";
@@ -14,23 +14,41 @@ import {
 } from "@/app/dashboard/actions";
 
 export function ItemRowView({ item }: { item: ItemRow }) {
-  const [isPending, startTransition] = useTransition();
-  const completed = item.status === "completed";
+  const [optimisticItem, setOptimisticItem] = useOptimistic(item);
+  // Covers the checkbox and focus star -- useOptimistic's setter must run
+  // inside a transition, so both flip instantly instead of waiting for the
+  // server round trip.
+  const [, startTransition] = useTransition();
+  const [isDeleting, startDeleteTransition] = useTransition();
+  const completed = optimisticItem.status === "completed";
+
+  function toggleComplete(checked: boolean) {
+    startTransition(async () => {
+      setOptimisticItem((prev) => ({
+        ...prev,
+        status: checked ? "completed" : "pending",
+      }));
+      await setItemStatusAction(item.id, checked ? "completed" : "pending");
+    });
+  }
+
+  function toggleFocus() {
+    startTransition(async () => {
+      setOptimisticItem((prev) => ({ ...prev, is_focus: !prev.is_focus }));
+      await setFocusAction(item.is_focus ? null : item.id);
+    });
+  }
 
   return (
     <div
       className={cn(
         "group flex items-center gap-3 rounded-lg px-2 py-2 transition-opacity hover:bg-accent/60",
-        isPending && "opacity-60",
+        isDeleting && "opacity-60",
       )}
     >
       <Checkbox
         checked={completed}
-        onCheckedChange={(checked) => {
-          startTransition(() => {
-            setItemStatusAction(item.id, checked ? "completed" : "pending");
-          });
-        }}
+        onCheckedChange={(checked) => toggleComplete(Boolean(checked))}
         aria-label={completed ? "Mark as not done" : "Mark as done"}
       />
       <span
@@ -43,21 +61,17 @@ export function ItemRowView({ item }: { item: ItemRow }) {
       </span>
       <button
         type="button"
-        aria-label={item.is_focus ? "Clear focus" : "Set as focus"}
+        aria-label={optimisticItem.is_focus ? "Clear focus" : "Set as focus"}
         className={cn(
           "opacity-0 transition-opacity group-hover:opacity-100",
-          item.is_focus && "opacity-100",
+          optimisticItem.is_focus && "opacity-100",
         )}
-        onClick={() =>
-          startTransition(() => {
-            setFocusAction(item.is_focus ? null : item.id);
-          })
-        }
+        onClick={toggleFocus}
       >
         <StarIcon
           className={cn(
             "size-4",
-            item.is_focus
+            optimisticItem.is_focus
               ? "fill-focus text-focus"
               : "text-muted-foreground",
           )}
@@ -69,7 +83,7 @@ export function ItemRowView({ item }: { item: ItemRow }) {
         size="icon"
         className="size-7 opacity-0 transition-opacity group-hover:opacity-100"
         aria-label="Delete item"
-        onClick={() => startTransition(() => deleteItemAction(item.id))}
+        onClick={() => startDeleteTransition(() => deleteItemAction(item.id))}
       >
         <Trash2Icon className="size-3.5" />
       </Button>
