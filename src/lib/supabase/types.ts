@@ -13,6 +13,7 @@ export type AppUserRow = {
 export type CategoryRow = {
   id: string;
   user_id: string;
+  parent_id: string | null;
   name: string;
   color: string;
   sort_order: number;
