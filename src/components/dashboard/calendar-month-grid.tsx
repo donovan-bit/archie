@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { eachDayOfInterval, format, isSameDay, isSameMonth, isToday } from "date-fns";
 
 import type { CalendarEvent } from "@/lib/google/calendar";
@@ -34,6 +34,54 @@ export function CalendarMonthGrid({
   const days = eachDayOfInterval({ start, end: new Date(end.getTime() - 1) });
   const [dragOverDay, setDragOverDay] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const dragMoveRef = useRef<{
+    event: CalendarEvent;
+    startClientX: number;
+    startClientY: number;
+    moved: boolean;
+    targetDay: string | null;
+  } | null>(null);
+
+  // Native HTML5 drag-and-drop is unreliable here (small drags get
+  // misread as clicks, drops on top of other event chips silently fail),
+  // so track the pointer manually instead.
+  useEffect(() => {
+    function onMouseMove(e: MouseEvent) {
+      const r = dragMoveRef.current;
+      if (!r) return;
+      const dx = e.clientX - r.startClientX;
+      const dy = e.clientY - r.startClientY;
+      if (!r.moved && Math.hypot(dx, dy) > 4) {
+        r.moved = true;
+        setDraggingId(r.event.id);
+      }
+      if (!r.moved) return;
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const cell = el instanceof Element ? el.closest("[data-day]") : null;
+      if (cell) {
+        const cellDay = cell.getAttribute("data-day");
+        r.targetDay = cellDay;
+        setDragOverDay(cellDay);
+      }
+    }
+    function onMouseUp() {
+      const r = dragMoveRef.current;
+      dragMoveRef.current = null;
+      setDraggingId(null);
+      setDragOverDay(null);
+      if (!r || !r.moved || !r.targetDay || !r.event.start) return;
+      const original = new Date(r.event.start);
+      const newStart = new Date(r.targetDay);
+      newStart.setHours(original.getHours(), original.getMinutes(), 0, 0);
+      onEventDrop(r.event, newStart);
+    }
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [onEventDrop]);
 
   return (
     <div className="overflow-hidden rounded-lg border border-border">
@@ -63,31 +111,13 @@ export function CalendarMonthGrid({
             <button
               key={dayKey}
               type="button"
+              data-day={dayKey}
               onClick={() => {
                 if (placingDuplicate) {
                   onPlaceDuplicate?.(day);
                 } else {
                   onSelectDay(day);
                 }
-              }}
-              onDragOver={(e) => {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = "move";
-              }}
-              onDragEnter={() => setDragOverDay(dayKey)}
-              onDragLeave={() =>
-                setDragOverDay((current) => (current === dayKey ? null : current))
-              }
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragOverDay(null);
-                const id = e.dataTransfer.getData("text/plain");
-                const dropped = events.find((ev) => ev.id === id);
-                if (!dropped || !dropped.start) return;
-                const original = new Date(dropped.start);
-                const newStart = new Date(day);
-                newStart.setHours(original.getHours(), original.getMinutes(), 0, 0);
-                onEventDrop(dropped, newStart);
               }}
               className={cn(
                 "flex min-h-24 flex-col gap-1 border-b border-l border-border p-1.5 text-left align-top first:border-l-0 [&:nth-child(7n+1)]:border-l-0 hover:bg-accent/40",
@@ -112,14 +142,17 @@ export function CalendarMonthGrid({
                       key={event.id}
                       role="button"
                       tabIndex={0}
-                      draggable={!event.allDay}
-                      onDragStart={(e) => {
+                      onMouseDown={(e) => {
+                        if (event.allDay) return;
                         e.stopPropagation();
-                        e.dataTransfer.setData("text/plain", event.id);
-                        e.dataTransfer.effectAllowed = "move";
-                        setDraggingId(event.id);
+                        dragMoveRef.current = {
+                          event,
+                          startClientX: e.clientX,
+                          startClientY: e.clientY,
+                          moved: false,
+                          targetDay: null,
+                        };
                       }}
-                      onDragEnd={() => setDraggingId(null)}
                       onClick={(e) => {
                         e.stopPropagation();
                         onEventClick(event);
@@ -135,6 +168,7 @@ export function CalendarMonthGrid({
                         "truncate rounded px-1 py-0.5 text-[10px] font-medium hover:opacity-90",
                         !event.allDay && "cursor-grab active:cursor-grabbing",
                         draggingId === event.id && "opacity-40",
+                        draggingId !== null && "pointer-events-none",
                       )}
                     >
                       {event.title}
