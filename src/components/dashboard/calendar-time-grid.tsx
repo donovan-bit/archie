@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { format, isSameDay, isToday } from "date-fns";
+import { CopyIcon } from "lucide-react";
 
 import type { CalendarEvent } from "@/lib/google/calendar";
 import { getEventColor } from "@/lib/google/event-colors";
@@ -46,13 +47,19 @@ export function CalendarTimeGrid({
   events,
   onEventClick,
   onSlotClick,
+  onEventDrop,
+  onEventDuplicate,
 }: {
   days: Date[];
   events: CalendarEvent[];
   onEventClick: (event: CalendarEvent) => void;
   onSlotClick: (start: Date, end: Date) => void;
+  onEventDrop: (event: CalendarEvent, newStart: Date) => void;
+  onEventDuplicate: (event: CalendarEvent) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [dragOverSlot, setDragOverSlot] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 7 * HOUR_HEIGHT - 24 });
@@ -142,21 +149,46 @@ export function CalendarTimeGrid({
                 key={day.toISOString()}
                 className="relative border-l border-border"
               >
-                {HOURS.map((hour) => (
-                  <button
-                    key={hour}
-                    type="button"
-                    style={{ height: HOUR_HEIGHT }}
-                    className="block w-full border-t border-border/60 first:border-t-0 hover:bg-accent/40"
-                    onClick={() => {
-                      const start = new Date(day);
-                      start.setHours(hour, 0, 0, 0);
-                      const end = new Date(start);
-                      end.setHours(hour + 1);
-                      onSlotClick(start, end);
-                    }}
-                  />
-                ))}
+                {HOURS.map((hour) => {
+                  const slotKey = `${day.toISOString()}-${hour}`;
+                  return (
+                    <button
+                      key={hour}
+                      type="button"
+                      style={{ height: HOUR_HEIGHT }}
+                      className={cn(
+                        "block w-full border-t border-border/60 first:border-t-0 hover:bg-accent/40",
+                        dragOverSlot === slotKey && "bg-accent",
+                      )}
+                      onClick={() => {
+                        const start = new Date(day);
+                        start.setHours(hour, 0, 0, 0);
+                        const end = new Date(start);
+                        end.setHours(hour + 1);
+                        onSlotClick(start, end);
+                      }}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = "move";
+                      }}
+                      onDragEnter={() => setDragOverSlot(slotKey)}
+                      onDragLeave={() =>
+                        setDragOverSlot((current) => (current === slotKey ? null : current))
+                      }
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setDragOverSlot(null);
+                        const id = e.dataTransfer.getData("text/plain");
+                        const dropped = events.find((ev) => ev.id === id);
+                        if (!dropped || !dropped.start) return;
+                        const original = new Date(dropped.start);
+                        const newStart = new Date(day);
+                        newStart.setHours(hour, original.getMinutes(), 0, 0);
+                        onEventDrop(dropped, newStart);
+                      }}
+                    />
+                  );
+                })}
 
                 {dayEvents.map(({ event, lane, laneCount }) => {
                   const start = new Date(event.start!);
@@ -170,12 +202,26 @@ export function CalendarTimeGrid({
                   const color = getEventColor(event.colorId);
 
                   return (
-                    <button
+                    <div
                       key={event.id}
-                      type="button"
+                      role="button"
+                      tabIndex={0}
+                      draggable={!event.allDay}
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("text/plain", event.id);
+                        e.dataTransfer.effectAllowed = "move";
+                        setDraggingId(event.id);
+                      }}
+                      onDragEnd={() => setDraggingId(null)}
                       onClick={(e) => {
                         e.stopPropagation();
                         onEventClick(event);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.stopPropagation();
+                          onEventClick(event);
+                        }
                       }}
                       style={{
                         top,
@@ -185,10 +231,27 @@ export function CalendarTimeGrid({
                         backgroundColor: color.bg,
                         color: color.fg,
                       }}
-                      className="absolute z-10 overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] font-medium shadow-sm hover:opacity-90"
+                      className={cn(
+                        "group absolute z-10 overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] font-medium shadow-sm hover:opacity-90",
+                        !event.allDay && "cursor-grab active:cursor-grabbing",
+                        draggingId === event.id && "opacity-40",
+                      )}
                     >
-                      <span className="block truncate">{event.title}</span>
-                    </button>
+                      <span className="block truncate pr-4">{event.title}</span>
+                      <button
+                        type="button"
+                        aria-label="Duplicate event"
+                        title="Duplicate"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEventDuplicate(event);
+                        }}
+                        style={{ color: color.fg }}
+                        className="absolute right-0.5 top-0.5 hidden rounded p-0.5 hover:bg-black/15 group-hover:block"
+                      >
+                        <CopyIcon className="size-3" />
+                      </button>
+                    </div>
                   );
                 })}
 
