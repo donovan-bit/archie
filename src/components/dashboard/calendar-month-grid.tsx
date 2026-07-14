@@ -18,6 +18,8 @@ export function CalendarMonthGrid({
   onSelectDay,
   onEventClick,
   onEventDrop,
+  placingDuplicate = false,
+  onPlaceDuplicate,
 }: {
   monthDate: Date;
   start: Date;
@@ -26,6 +28,8 @@ export function CalendarMonthGrid({
   onSelectDay: (day: Date) => void;
   onEventClick: (event: CalendarEvent) => void;
   onEventDrop: (event: CalendarEvent, newStart: Date) => void;
+  placingDuplicate?: boolean;
+  onPlaceDuplicate?: (day: Date) => void;
 }) {
   const days = eachDayOfInterval({ start, end: new Date(end.getTime() - 1) });
   const [dragOverDay, setDragOverDay] = useState<string | null>(null);
@@ -59,7 +63,13 @@ export function CalendarMonthGrid({
             <button
               key={dayKey}
               type="button"
-              onClick={() => onSelectDay(day)}
+              onClick={() => {
+                if (placingDuplicate) {
+                  onPlaceDuplicate?.(day);
+                } else {
+                  onSelectDay(day);
+                }
+              }}
               onDragOver={(e) => {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = "move";
@@ -83,6 +93,7 @@ export function CalendarMonthGrid({
                 "flex min-h-24 flex-col gap-1 border-b border-l border-border p-1.5 text-left align-top first:border-l-0 [&:nth-child(7n+1)]:border-l-0 hover:bg-accent/40",
                 !isSameMonth(day, monthDate) && "bg-muted/40 text-muted-foreground",
                 dragOverDay === dayKey && "bg-accent",
+                placingDuplicate && "cursor-copy hover:bg-[#1a73e8]/10",
               )}
             >
               <span
