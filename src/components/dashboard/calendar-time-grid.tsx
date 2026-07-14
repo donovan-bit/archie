@@ -48,6 +48,7 @@ export function CalendarTimeGrid({
   onEventClick,
   onSlotClick,
   onEventDrop,
+  onEventResize,
   onEventDuplicate,
   placingDuplicate = false,
 }: {
@@ -56,22 +57,68 @@ export function CalendarTimeGrid({
   onEventClick: (event: CalendarEvent) => void;
   onSlotClick: (start: Date, end: Date) => void;
   onEventDrop: (event: CalendarEvent, newStart: Date) => void;
+  onEventResize: (event: CalendarEvent, newEnd: Date) => void;
   onEventDuplicate: (event: CalendarEvent) => void;
   placingDuplicate?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [dragOverSlot, setDragOverSlot] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [resizePreview, setResizePreview] = useState<{ id: string; end: Date } | null>(null);
+  const resizeRef = useRef<{
+    event: CalendarEvent;
+    day: Date;
+    startClientY: number;
+    originStart: Date;
+    originEnd: Date;
+  } | null>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 7 * HOUR_HEIGHT - 24 });
   }, []);
 
+  useEffect(() => {
+    function onMouseMove(e: MouseEvent) {
+      const r = resizeRef.current;
+      if (!r) return;
+      const deltaMinutes = ((e.clientY - r.startClientY) / HOUR_HEIGHT) * 60;
+      const snapped = Math.round(deltaMinutes / 15) * 15;
+      let newEnd = new Date(r.originEnd.getTime() + snapped * 60000);
+      const minEnd = new Date(r.originStart.getTime() + 15 * 60000);
+      if (newEnd < minEnd) newEnd = minEnd;
+      const dayEnd = new Date(r.day);
+      dayEnd.setHours(23, 59, 0, 0);
+      if (newEnd > dayEnd) newEnd = dayEnd;
+      setResizePreview({ id: r.event.id, end: newEnd });
+    }
+    function onMouseUp() {
+      const r = resizeRef.current;
+      if (!r) return;
+      resizeRef.current = null;
+      setResizePreview((preview) => {
+        const finalEnd = preview && preview.id === r.event.id ? preview.end : r.originEnd;
+        onEventResize(r.event, finalEnd);
+        return null;
+      });
+    }
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [onEventResize]);
+
   const allDayEvents = events.filter((e) => e.allDay);
   const gridTemplateColumns = `56px repeat(${days.length}, minmax(0, 1fr))`;
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border">
+    <div
+      className={cn(
+        "overflow-hidden rounded-lg border border-border",
+        resizePreview && "select-none",
+      )}
+    >
       {days.length > 1 && (
         <div className="grid border-b border-border" style={{ gridTemplateColumns }}>
           <div />
@@ -195,7 +242,8 @@ export function CalendarTimeGrid({
 
                 {dayEvents.map(({ event, lane, laneCount }) => {
                   const start = new Date(event.start!);
-                  const end = new Date(event.end!);
+                  const isResizingThis = resizePreview?.id === event.id;
+                  const end = isResizingThis ? resizePreview!.end : new Date(event.end!);
                   const top = (minutesSinceMidnight(start) / 60) * HOUR_HEIGHT;
                   const height = Math.max(
                     ((end.getTime() - start.getTime()) / 60000 / 60) * HOUR_HEIGHT,
@@ -238,6 +286,7 @@ export function CalendarTimeGrid({
                         "group absolute z-10 overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] font-medium shadow-sm hover:opacity-90",
                         !event.allDay && "cursor-grab active:cursor-grabbing",
                         draggingId === event.id && "opacity-40",
+                        isResizingThis && "opacity-90 ring-2 ring-white/70",
                       )}
                     >
                       <span className="block truncate pr-4">{event.title}</span>
@@ -254,6 +303,23 @@ export function CalendarTimeGrid({
                       >
                         <CopyIcon className="size-3" />
                       </button>
+                      {!event.allDay && (
+                        <div
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            resizeRef.current = {
+                              event,
+                              day,
+                              startClientY: e.clientY,
+                              originStart: start,
+                              originEnd: new Date(event.end!),
+                            };
+                            setResizePreview({ id: event.id, end: new Date(event.end!) });
+                          }}
+                          className="absolute inset-x-0 bottom-0 h-2 cursor-ns-resize group-hover:bg-black/20"
+                        />
+                      )}
                     </div>
                   );
                 })}

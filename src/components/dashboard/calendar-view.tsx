@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useOptimistic, useState, useTransition } from "react";
 import {
   addDays,
   addMonths,
@@ -27,6 +27,27 @@ import {
 
 export type CalendarViewMode = "day" | "week" | "month";
 type ViewMode = CalendarViewMode;
+
+type EventAction =
+  | { type: "patch"; id: string; start?: string; end?: string }
+  | { type: "add"; event: CalendarEvent };
+
+function eventsReducer(state: CalendarEvent[], action: EventAction): CalendarEvent[] {
+  switch (action.type) {
+    case "patch":
+      return state.map((e) =>
+        e.id === action.id
+          ? {
+              ...e,
+              ...(action.start !== undefined ? { start: action.start } : {}),
+              ...(action.end !== undefined ? { end: action.end } : {}),
+            }
+          : e,
+      );
+    case "add":
+      return [...state, action.event];
+  }
+}
 
 function rangeFor(view: ViewMode, date: Date) {
   if (view === "day") {
@@ -63,6 +84,8 @@ export function CalendarView({
     | null
   >(null);
   const [pendingDuplicate, setPendingDuplicate] = useState<CalendarEvent | null>(null);
+  const [optimisticEvents, dispatchEvents] = useOptimistic(events, eventsReducer);
+  const [, startTransition] = useTransition();
 
   const { start, end } = useMemo(() => rangeFor(view, currentDate), [view, currentDate]);
 
@@ -92,17 +115,32 @@ export function CalendarView({
   }, [fetchEvents]);
 
   const handleEventDrop = useCallback(
-    async (event: CalendarEvent, newStart: Date) => {
+    (event: CalendarEvent, newStart: Date) => {
       if (!event.start || !event.end || event.allDay) return;
       const duration = new Date(event.end).getTime() - new Date(event.start).getTime();
       const newEnd = new Date(newStart.getTime() + duration);
-      await updateCalendarEventAction(event.id, {
-        startIso: newStart.toISOString(),
-        endIso: newEnd.toISOString(),
+      const startIso = newStart.toISOString();
+      const endIso = newEnd.toISOString();
+      startTransition(async () => {
+        dispatchEvents({ type: "patch", id: event.id, start: startIso, end: endIso });
+        await updateCalendarEventAction(event.id, { startIso, endIso });
+        fetchEvents();
       });
-      fetchEvents();
     },
-    [fetchEvents],
+    [fetchEvents, dispatchEvents],
+  );
+
+  const handleEventResize = useCallback(
+    (event: CalendarEvent, newEnd: Date) => {
+      if (!event.start || !event.end || event.allDay) return;
+      const endIso = newEnd.toISOString();
+      startTransition(async () => {
+        dispatchEvents({ type: "patch", id: event.id, end: endIso });
+        await updateCalendarEventAction(event.id, { endIso });
+        fetchEvents();
+      });
+    },
+    [fetchEvents, dispatchEvents],
   );
 
   const startDuplicate = useCallback((event: CalendarEvent) => {
@@ -113,21 +151,37 @@ export function CalendarView({
   const cancelDuplicate = useCallback(() => setPendingDuplicate(null), []);
 
   const placeDuplicate = useCallback(
-    async (newStart: Date) => {
+    (newStart: Date) => {
       const source = pendingDuplicate;
       if (!source || !source.start || !source.end) return;
       const duration = new Date(source.end).getTime() - new Date(source.start).getTime();
       const newEnd = new Date(newStart.getTime() + duration);
+      const startIso = newStart.toISOString();
+      const endIso = newEnd.toISOString();
       setPendingDuplicate(null);
-      await createCalendarEventAction({
-        title: source.title,
-        startIso: newStart.toISOString(),
-        endIso: newEnd.toISOString(),
-        colorId: source.colorId,
+      startTransition(async () => {
+        dispatchEvents({
+          type: "add",
+          event: {
+            id: `temp-${crypto.randomUUID()}`,
+            title: source.title,
+            start: startIso,
+            end: endIso,
+            allDay: false,
+            htmlLink: null,
+            colorId: source.colorId,
+          },
+        });
+        await createCalendarEventAction({
+          title: source.title,
+          startIso,
+          endIso,
+          colorId: source.colorId,
+        });
+        fetchEvents();
       });
-      fetchEvents();
     },
-    [pendingDuplicate, fetchEvents],
+    [pendingDuplicate, fetchEvents, dispatchEvents],
   );
 
   useEffect(() => {
@@ -265,7 +319,7 @@ export function CalendarView({
               monthDate={currentDate}
               start={start}
               end={end}
-              events={events}
+              events={optimisticEvents}
               onSelectDay={(day) => {
                 setCurrentDate(day);
                 onViewChange("day");
@@ -288,7 +342,7 @@ export function CalendarView({
                   ? [currentDate]
                   : Array.from({ length: 7 }, (_, i) => addDays(start, i))
               }
-              events={events}
+              events={optimisticEvents}
               onEventClick={(event) => setDialogState({ mode: "edit", event })}
               onSlotClick={(slotStart, slotEnd) => {
                 if (pendingDuplicate) {
@@ -298,6 +352,7 @@ export function CalendarView({
                 }
               }}
               onEventDrop={handleEventDrop}
+              onEventResize={handleEventResize}
               onEventDuplicate={startDuplicate}
               placingDuplicate={pendingDuplicate !== null}
             />
