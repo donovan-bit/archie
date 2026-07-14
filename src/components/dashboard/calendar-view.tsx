@@ -20,6 +20,10 @@ import { EventFormDialog } from "@/components/dashboard/event-form-dialog";
 import { CalendarTimeGrid } from "@/components/dashboard/calendar-time-grid";
 import { CalendarMonthGrid } from "@/components/dashboard/calendar-month-grid";
 import { DashboardSection } from "@/components/dashboard/dashboard-section";
+import {
+  createCalendarEventAction,
+  updateCalendarEventAction,
+} from "@/app/dashboard/actions";
 
 export type CalendarViewMode = "day" | "week" | "month";
 type ViewMode = CalendarViewMode;
@@ -85,6 +89,38 @@ export function CalendarView({
     const timeoutId = setTimeout(fetchEvents, 0);
     return () => clearTimeout(timeoutId);
   }, [fetchEvents]);
+
+  const handleEventDrop = useCallback(
+    async (event: CalendarEvent, newStart: Date) => {
+      if (!event.start || !event.end || event.allDay) return;
+      const duration = new Date(event.end).getTime() - new Date(event.start).getTime();
+      const newEnd = new Date(newStart.getTime() + duration);
+      await updateCalendarEventAction(event.id, {
+        startIso: newStart.toISOString(),
+        endIso: newEnd.toISOString(),
+      });
+      fetchEvents();
+    },
+    [fetchEvents],
+  );
+
+  const handleEventDuplicate = useCallback(
+    async (event: CalendarEvent) => {
+      if (!event.start || !event.end || event.allDay) return;
+      const duration = new Date(event.end).getTime() - new Date(event.start).getTime();
+      const offsetMs = view === "month" ? 24 * 60 * 60 * 1000 : 60 * 60 * 1000;
+      const newStart = new Date(new Date(event.start).getTime() + offsetMs);
+      const newEnd = new Date(newStart.getTime() + duration);
+      await createCalendarEventAction({
+        title: event.title,
+        startIso: newStart.toISOString(),
+        endIso: newEnd.toISOString(),
+        colorId: event.colorId,
+      });
+      fetchEvents();
+    },
+    [view, fetchEvents],
+  );
 
   function goPrev() {
     setCurrentDate((d) =>
@@ -201,6 +237,7 @@ export function CalendarView({
                 onViewChange("day");
               }}
               onEventClick={(event) => setDialogState({ mode: "edit", event })}
+              onEventDrop={handleEventDrop}
             />
           ) : (
             <CalendarTimeGrid
@@ -214,6 +251,8 @@ export function CalendarView({
               onSlotClick={(slotStart, slotEnd) =>
                 setDialogState({ mode: "create", start: slotStart, end: slotEnd })
               }
+              onEventDrop={handleEventDrop}
+              onEventDuplicate={handleEventDuplicate}
             />
           )}
         </>
@@ -228,6 +267,7 @@ export function CalendarView({
         initialStart={dialogState?.mode === "create" ? dialogState.start : undefined}
         initialEnd={dialogState?.mode === "create" ? dialogState.end : undefined}
         onSaved={fetchEvents}
+        onDuplicate={handleEventDuplicate}
       />
     </DashboardSection>
   );

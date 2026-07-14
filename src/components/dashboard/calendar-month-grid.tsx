@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { eachDayOfInterval, format, isSameDay, isSameMonth, isToday } from "date-fns";
 
 import type { CalendarEvent } from "@/lib/google/calendar";
@@ -16,6 +17,7 @@ export function CalendarMonthGrid({
   events,
   onSelectDay,
   onEventClick,
+  onEventDrop,
 }: {
   monthDate: Date;
   start: Date;
@@ -23,8 +25,11 @@ export function CalendarMonthGrid({
   events: CalendarEvent[];
   onSelectDay: (day: Date) => void;
   onEventClick: (event: CalendarEvent) => void;
+  onEventDrop: (event: CalendarEvent, newStart: Date) => void;
 }) {
   const days = eachDayOfInterval({ start, end: new Date(end.getTime() - 1) });
+  const [dragOverDay, setDragOverDay] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
 
   return (
     <div className="overflow-hidden rounded-lg border border-border">
@@ -48,14 +53,36 @@ export function CalendarMonthGrid({
           const visible = dayEvents.slice(0, MAX_VISIBLE);
           const overflow = dayEvents.length - visible.length;
 
+          const dayKey = day.toISOString();
+
           return (
             <button
-              key={day.toISOString()}
+              key={dayKey}
               type="button"
               onClick={() => onSelectDay(day)}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+              }}
+              onDragEnter={() => setDragOverDay(dayKey)}
+              onDragLeave={() =>
+                setDragOverDay((current) => (current === dayKey ? null : current))
+              }
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOverDay(null);
+                const id = e.dataTransfer.getData("text/plain");
+                const dropped = events.find((ev) => ev.id === id);
+                if (!dropped || !dropped.start) return;
+                const original = new Date(dropped.start);
+                const newStart = new Date(day);
+                newStart.setHours(original.getHours(), original.getMinutes(), 0, 0);
+                onEventDrop(dropped, newStart);
+              }}
               className={cn(
                 "flex min-h-24 flex-col gap-1 border-b border-l border-border p-1.5 text-left align-top first:border-l-0 [&:nth-child(7n+1)]:border-l-0 hover:bg-accent/40",
                 !isSameMonth(day, monthDate) && "bg-muted/40 text-muted-foreground",
+                dragOverDay === dayKey && "bg-accent",
               )}
             >
               <span
@@ -74,6 +101,14 @@ export function CalendarMonthGrid({
                       key={event.id}
                       role="button"
                       tabIndex={0}
+                      draggable={!event.allDay}
+                      onDragStart={(e) => {
+                        e.stopPropagation();
+                        e.dataTransfer.setData("text/plain", event.id);
+                        e.dataTransfer.effectAllowed = "move";
+                        setDraggingId(event.id);
+                      }}
+                      onDragEnd={() => setDraggingId(null)}
                       onClick={(e) => {
                         e.stopPropagation();
                         onEventClick(event);
@@ -85,7 +120,11 @@ export function CalendarMonthGrid({
                         }
                       }}
                       style={{ backgroundColor: color.bg, color: color.fg }}
-                      className="truncate rounded px-1 py-0.5 text-[10px] font-medium hover:opacity-90"
+                      className={cn(
+                        "truncate rounded px-1 py-0.5 text-[10px] font-medium hover:opacity-90",
+                        !event.allDay && "cursor-grab active:cursor-grabbing",
+                        draggingId === event.id && "opacity-40",
+                      )}
                     >
                       {event.title}
                     </span>

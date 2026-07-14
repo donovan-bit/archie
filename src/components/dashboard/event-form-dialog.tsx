@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { CopyIcon } from "lucide-react";
 
 import type { CalendarEvent } from "@/lib/google/calendar";
 import { DEFAULT_EVENT_COLOR, EVENT_COLORS } from "@/lib/google/event-colors";
@@ -40,6 +41,7 @@ export function EventFormDialog({
   initialStart,
   initialEnd,
   onSaved,
+  onDuplicate,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -47,6 +49,7 @@ export function EventFormDialog({
   initialStart?: Date;
   initialEnd?: Date;
   onSaved: () => void;
+  onDuplicate?: (event: CalendarEvent) => void;
 }) {
   const isEditing = Boolean(event);
   const [title, setTitle] = useState("");
@@ -113,6 +116,12 @@ export function EventFormDialog({
       onOpenChange(false);
       onSaved();
     });
+  }
+
+  function handleDuplicate() {
+    if (!event || !onDuplicate) return;
+    onDuplicate(event);
+    onOpenChange(false);
   }
 
   return (
@@ -188,14 +197,26 @@ export function EventFormDialog({
           </div>
           <DialogFooter className="sm:justify-between">
             {isEditing && (
-              <Button
-                type="button"
-                variant="destructive"
-                disabled={isPending}
-                onClick={handleDelete}
-              >
-                Delete
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={isPending}
+                  onClick={handleDelete}
+                >
+                  Delete
+                </Button>
+                {onDuplicate && event && !event.allDay && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isPending}
+                    onClick={handleDuplicate}
+                  >
+                    <CopyIcon /> Duplicate
+                  </Button>
+                )}
+              </div>
             )}
             <Button type="submit" disabled={isPending}>
               {isPending
