@@ -72,6 +72,14 @@ export function CalendarTimeGrid({
     originStart: Date;
     originEnd: Date;
   } | null>(null);
+  const dragMoveRef = useRef<{
+    event: CalendarEvent;
+    startClientX: number;
+    startClientY: number;
+    moved: boolean;
+    targetDay: string | null;
+    targetHour: number | null;
+  } | null>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 7 * HOUR_HEIGHT - 24 });
@@ -109,6 +117,50 @@ export function CalendarTimeGrid({
     };
   }, [onEventResize]);
 
+  // Native HTML5 drag-and-drop is unreliable for this kind of dense,
+  // overlapping-element grid (small drags get misread as clicks, drops on
+  // top of other event blocks silently fail). Track the pointer manually
+  // instead, the same way resizing already does.
+  useEffect(() => {
+    function onMouseMove(e: MouseEvent) {
+      const r = dragMoveRef.current;
+      if (!r) return;
+      const dx = e.clientX - r.startClientX;
+      const dy = e.clientY - r.startClientY;
+      if (!r.moved && Math.hypot(dx, dy) > 4) {
+        r.moved = true;
+        setDraggingId(r.event.id);
+      }
+      if (!r.moved) return;
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const cell = el instanceof Element ? el.closest("[data-hour]") : null;
+      if (cell) {
+        const cellDay = cell.getAttribute("data-day");
+        const cellHour = Number(cell.getAttribute("data-hour"));
+        r.targetDay = cellDay;
+        r.targetHour = cellHour;
+        setDragOverSlot(`${cellDay}-${cellHour}`);
+      }
+    }
+    function onMouseUp() {
+      const r = dragMoveRef.current;
+      dragMoveRef.current = null;
+      setDraggingId(null);
+      setDragOverSlot(null);
+      if (!r || !r.moved || !r.targetDay || r.targetHour === null || !r.event.start) return;
+      const original = new Date(r.event.start);
+      const newStart = new Date(r.targetDay);
+      newStart.setHours(r.targetHour, original.getMinutes(), 0, 0);
+      onEventDrop(r.event, newStart);
+    }
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [onEventDrop]);
+
   const allDayEvents = events.filter((e) => e.allDay);
   const gridTemplateColumns = `56px repeat(${days.length}, minmax(0, 1fr))`;
 
@@ -116,7 +168,7 @@ export function CalendarTimeGrid({
     <div
       className={cn(
         "overflow-hidden rounded-lg border border-border",
-        resizePreview && "select-none",
+        (resizePreview || draggingId) && "select-none",
       )}
     >
       {days.length > 1 && (
@@ -204,6 +256,8 @@ export function CalendarTimeGrid({
                     <button
                       key={hour}
                       type="button"
+                      data-day={day.toISOString()}
+                      data-hour={hour}
                       style={{ height: HOUR_HEIGHT }}
                       className={cn(
                         "block w-full border-t border-border/60 first:border-t-0 hover:bg-accent/40",
@@ -216,25 +270,6 @@ export function CalendarTimeGrid({
                         const end = new Date(start);
                         end.setHours(hour + 1);
                         onSlotClick(start, end);
-                      }}
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        e.dataTransfer.dropEffect = "move";
-                      }}
-                      onDragEnter={() => setDragOverSlot(slotKey)}
-                      onDragLeave={() =>
-                        setDragOverSlot((current) => (current === slotKey ? null : current))
-                      }
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        setDragOverSlot(null);
-                        const id = e.dataTransfer.getData("text/plain");
-                        const dropped = events.find((ev) => ev.id === id);
-                        if (!dropped || !dropped.start) return;
-                        const original = new Date(dropped.start);
-                        const newStart = new Date(day);
-                        newStart.setHours(hour, original.getMinutes(), 0, 0);
-                        onEventDrop(dropped, newStart);
                       }}
                     />
                   );
@@ -257,13 +292,17 @@ export function CalendarTimeGrid({
                       key={event.id}
                       role="button"
                       tabIndex={0}
-                      draggable={!event.allDay}
-                      onDragStart={(e) => {
-                        e.dataTransfer.setData("text/plain", event.id);
-                        e.dataTransfer.effectAllowed = "move";
-                        setDraggingId(event.id);
+                      onMouseDown={(e) => {
+                        if (event.allDay) return;
+                        dragMoveRef.current = {
+                          event,
+                          startClientX: e.clientX,
+                          startClientY: e.clientY,
+                          moved: false,
+                          targetDay: null,
+                          targetHour: null,
+                        };
                       }}
-                      onDragEnd={() => setDraggingId(null)}
                       onClick={(e) => {
                         e.stopPropagation();
                         onEventClick(event);
@@ -286,6 +325,7 @@ export function CalendarTimeGrid({
                         "group absolute z-10 overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] font-medium shadow-sm hover:opacity-90",
                         !event.allDay && "cursor-grab active:cursor-grabbing",
                         draggingId === event.id && "opacity-40",
+                        draggingId !== null && "pointer-events-none",
                         isResizingThis && "opacity-90 ring-2 ring-white/70",
                       )}
                     >
