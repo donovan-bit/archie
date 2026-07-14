@@ -49,6 +49,7 @@ export function CalendarTimeGrid({
   onSlotClick,
   onEventDrop,
   onEventDuplicate,
+  placingDuplicate = false,
 }: {
   days: Date[];
   events: CalendarEvent[];
@@ -56,6 +57,7 @@ export function CalendarTimeGrid({
   onSlotClick: (start: Date, end: Date) => void;
   onEventDrop: (event: CalendarEvent, newStart: Date) => void;
   onEventDuplicate: (event: CalendarEvent) => void;
+  placingDuplicate?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [dragOverSlot, setDragOverSlot] = useState<string | null>(null);
@@ -159,6 +161,7 @@ export function CalendarTimeGrid({
                       className={cn(
                         "block w-full border-t border-border/60 first:border-t-0 hover:bg-accent/40",
                         dragOverSlot === slotKey && "bg-accent",
+                        placingDuplicate && "cursor-copy hover:bg-[#1a73e8]/10",
                       )}
                       onClick={() => {
                         const start = new Date(day);

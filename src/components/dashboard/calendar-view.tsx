@@ -11,7 +11,7 @@ import {
   startOfMonth,
   startOfWeek,
 } from "date-fns";
-import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon } from "lucide-react";
+import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon, XIcon } from "lucide-react";
 
 import type { CalendarEvent } from "@/lib/google/calendar";
 import { cn } from "@/lib/utils";
@@ -62,6 +62,7 @@ export function CalendarView({
     | { mode: "edit"; event: CalendarEvent }
     | null
   >(null);
+  const [pendingDuplicate, setPendingDuplicate] = useState<CalendarEvent | null>(null);
 
   const { start, end } = useMemo(() => rangeFor(view, currentDate), [view, currentDate]);
 
@@ -104,23 +105,39 @@ export function CalendarView({
     [fetchEvents],
   );
 
-  const handleEventDuplicate = useCallback(
-    async (event: CalendarEvent) => {
-      if (!event.start || !event.end || event.allDay) return;
-      const duration = new Date(event.end).getTime() - new Date(event.start).getTime();
-      const offsetMs = view === "month" ? 24 * 60 * 60 * 1000 : 60 * 60 * 1000;
-      const newStart = new Date(new Date(event.start).getTime() + offsetMs);
+  const startDuplicate = useCallback((event: CalendarEvent) => {
+    if (!event.start || !event.end || event.allDay) return;
+    setPendingDuplicate(event);
+  }, []);
+
+  const cancelDuplicate = useCallback(() => setPendingDuplicate(null), []);
+
+  const placeDuplicate = useCallback(
+    async (newStart: Date) => {
+      const source = pendingDuplicate;
+      if (!source || !source.start || !source.end) return;
+      const duration = new Date(source.end).getTime() - new Date(source.start).getTime();
       const newEnd = new Date(newStart.getTime() + duration);
+      setPendingDuplicate(null);
       await createCalendarEventAction({
-        title: event.title,
+        title: source.title,
         startIso: newStart.toISOString(),
         endIso: newEnd.toISOString(),
-        colorId: event.colorId,
+        colorId: source.colorId,
       });
       fetchEvents();
     },
-    [view, fetchEvents],
+    [pendingDuplicate, fetchEvents],
   );
+
+  useEffect(() => {
+    if (!pendingDuplicate) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setPendingDuplicate(null);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [pendingDuplicate]);
 
   function goPrev() {
     setCurrentDate((d) =>
@@ -226,6 +243,23 @@ export function CalendarView({
             <p className="text-xs text-muted-foreground">Loading…</p>
           )}
 
+          {pendingDuplicate && (
+            <div className="flex items-center justify-between gap-2 rounded-md border border-[#1a73e8]/30 bg-[#1a73e8]/10 px-3 py-2 text-sm text-[#1a73e8]">
+              <span>
+                Click where you&apos;d like to place the duplicate of &ldquo;
+                {pendingDuplicate.title}&rdquo;
+              </span>
+              <button
+                type="button"
+                onClick={cancelDuplicate}
+                aria-label="Cancel duplicate"
+                className="rounded p-0.5 hover:bg-[#1a73e8]/15"
+              >
+                <XIcon className="size-4" />
+              </button>
+            </div>
+          )}
+
           {view === "month" ? (
             <CalendarMonthGrid
               monthDate={currentDate}
@@ -238,6 +272,14 @@ export function CalendarView({
               }}
               onEventClick={(event) => setDialogState({ mode: "edit", event })}
               onEventDrop={handleEventDrop}
+              placingDuplicate={pendingDuplicate !== null}
+              onPlaceDuplicate={(day) => {
+                if (!pendingDuplicate?.start) return;
+                const original = new Date(pendingDuplicate.start);
+                const newStart = new Date(day);
+                newStart.setHours(original.getHours(), original.getMinutes(), 0, 0);
+                placeDuplicate(newStart);
+              }}
             />
           ) : (
             <CalendarTimeGrid
@@ -248,11 +290,16 @@ export function CalendarView({
               }
               events={events}
               onEventClick={(event) => setDialogState({ mode: "edit", event })}
-              onSlotClick={(slotStart, slotEnd) =>
-                setDialogState({ mode: "create", start: slotStart, end: slotEnd })
-              }
+              onSlotClick={(slotStart, slotEnd) => {
+                if (pendingDuplicate) {
+                  placeDuplicate(slotStart);
+                } else {
+                  setDialogState({ mode: "create", start: slotStart, end: slotEnd });
+                }
+              }}
               onEventDrop={handleEventDrop}
-              onEventDuplicate={handleEventDuplicate}
+              onEventDuplicate={startDuplicate}
+              placingDuplicate={pendingDuplicate !== null}
             />
           )}
         </>
@@ -267,7 +314,7 @@ export function CalendarView({
         initialStart={dialogState?.mode === "create" ? dialogState.start : undefined}
         initialEnd={dialogState?.mode === "create" ? dialogState.end : undefined}
         onSaved={fetchEvents}
-        onDuplicate={handleEventDuplicate}
+        onDuplicate={startDuplicate}
       />
     </DashboardSection>
   );
