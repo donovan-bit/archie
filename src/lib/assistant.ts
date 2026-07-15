@@ -32,8 +32,8 @@ const READ_TOOLS = new Set(["list_items", "list_categories"]);
 // running them -- see runAssistantTurn's loop below.
 const WRITE_TOOLS = new Set([
   "create_item",
-  "update_item_status",
-  "delete_item",
+  "update_items_status",
+  "delete_items",
   "set_focus",
   "clear_focus",
 ]);
@@ -45,7 +45,7 @@ const TOOLS: Tool[] = [
     name: "list_items",
     description:
       "Read the to-do items for a given period (e.g. today's day list, this week, this month). Use this to see " +
-      "what's on the list, including each item's id (needed for update_item_status/delete_item/set_focus), title, " +
+      "what's on the list, including each item's id (needed for update_items_status/delete_items/set_focus), title, " +
       "status, category, and whether it's the current focus item.",
     input_schema: {
       type: "object",
@@ -82,24 +82,30 @@ const TOOLS: Tool[] = [
     },
   },
   {
-    name: "update_item_status",
-    description: "Mark an item as done or not done. Only call this when the user has explicitly asked for it.",
+    name: "update_items_status",
+    description:
+      "Mark one or more items as done or not done. Only call this when the user has explicitly asked for it. " +
+      "If several items are involved (e.g. 'mark these done'), pass all their ids in one call instead of calling " +
+      "this once per item -- the user confirms the whole batch at once, not each item separately.",
     input_schema: {
       type: "object",
       properties: {
-        itemId: { type: "string" },
+        itemIds: { type: "array", items: { type: "string" } },
         status: { type: "string", enum: ["completed", "pending"] },
       },
-      required: ["itemId", "status"],
+      required: ["itemIds", "status"],
     },
   },
   {
-    name: "delete_item",
-    description: "Permanently delete an item. Only call this when the user has explicitly asked to remove/delete it.",
+    name: "delete_items",
+    description:
+      "Permanently delete one or more items. Only call this when the user has explicitly asked to remove/delete " +
+      "them -- e.g. after they ask you to find and delete duplicates, pass every duplicate's id in one call " +
+      "instead of calling this once per item, so they confirm the whole batch at once.",
     input_schema: {
       type: "object",
-      properties: { itemId: { type: "string" } },
-      required: ["itemId"],
+      properties: { itemIds: { type: "array", items: { type: "string" } } },
+      required: ["itemIds"],
     },
   },
   {
@@ -126,6 +132,9 @@ function systemPrompt(userName: string | null | undefined): string {
     "You can freely read the to-do list and categories. For anything that changes data (creating, completing, " +
     "deleting, or focusing an item), call exactly one tool per turn and then stop -- the app will show the user a " +
     "confirmation before it actually happens, so don't ask for confirmation in words yourself, just call the tool. " +
+    "When the request covers several items at once (mark these 3 done, delete all the duplicates you found), use " +
+    "the batch form (update_items_status/delete_items with an array of ids) so the user confirms once for the " +
+    "whole group instead of once per item -- don't call a single-item action in a loop. " +
     "Never call a write tool for something the user hasn't actually asked for in this conversation -- don't " +
     "proactively reorganize, complete, or delete things on your own initiative. If a request is ambiguous (e.g. " +
     "which item they mean), ask a clarifying question in text instead of guessing.\n\n" +
@@ -171,6 +180,15 @@ async function runReadTool(userId: string, name: string, input: Record<string, u
   }
 }
 
+/** "A", "B", "C" and 4 more -- caps the list so a 60-item batch doesn't blow up the confirmation card. */
+async function titleList(userId: string, itemIds: string[]): Promise<string> {
+  const titles = await Promise.all(itemIds.map((id) => getItem(userId, id)));
+  const names = titles.map((item, i) => (item ? `"${item.title}"` : `"${itemIds[i]}"`));
+  const shown = names.slice(0, 5);
+  const rest = names.length - shown.length;
+  return rest > 0 ? `${shown.join(", ")}, and ${rest} more` : shown.join(", ");
+}
+
 /** Human-readable summary of a pending write action, shown in the confirmation UI. */
 async function describeWriteAction(
   userId: string,
@@ -182,14 +200,18 @@ async function describeWriteAction(
       const period = periodLabel(input.periodType as PeriodType, String(input.periodStart));
       return `Add "${input.title}" to ${period}`;
     }
-    case "update_item_status": {
-      const item = await getItem(userId, String(input.itemId));
-      const title = item?.title ?? "that item";
-      return input.status === "completed" ? `Mark "${title}" as done` : `Mark "${title}" as not done`;
+    case "update_items_status": {
+      const itemIds = (input.itemIds as string[]) ?? [];
+      const verb = input.status === "completed" ? "done" : "not done";
+      return itemIds.length === 1
+        ? `Mark ${await titleList(userId, itemIds)} as ${verb}`
+        : `Mark ${itemIds.length} items as ${verb}: ${await titleList(userId, itemIds)}`;
     }
-    case "delete_item": {
-      const item = await getItem(userId, String(input.itemId));
-      return `Delete "${item?.title ?? "that item"}"`;
+    case "delete_items": {
+      const itemIds = (input.itemIds as string[]) ?? [];
+      return itemIds.length === 1
+        ? `Delete ${await titleList(userId, itemIds)}`
+        : `Delete ${itemIds.length} items: ${await titleList(userId, itemIds)}`;
     }
     case "set_focus": {
       const item = await getItem(userId, String(input.itemId));
@@ -213,10 +235,15 @@ async function runWriteTool(userId: string, name: string, input: Record<string, 
         periodType: input.periodType as PeriodType,
         periodStart: String(input.periodStart),
       });
-    case "update_item_status":
-      return updateItemStatus(userId, String(input.itemId), input.status as "completed" | "pending");
-    case "delete_item":
-      return deleteItem(userId, String(input.itemId));
+    case "update_items_status": {
+      const itemIds = (input.itemIds as string[]) ?? [];
+      const status = input.status as "completed" | "pending";
+      return Promise.all(itemIds.map((id) => updateItemStatus(userId, id, status)));
+    }
+    case "delete_items": {
+      const itemIds = (input.itemIds as string[]) ?? [];
+      return Promise.all(itemIds.map((id) => deleteItem(userId, id)));
+    }
     case "set_focus":
       return setFocusItem(userId, String(input.itemId));
     case "clear_focus":
