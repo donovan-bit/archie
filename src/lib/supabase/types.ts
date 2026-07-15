@@ -61,6 +61,11 @@ export type Database = {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      rollover_item: {
+        Args: { p_item_id: string; p_next_period_start: string };
+        Returns: undefined;
+      };
+    };
   };
 };

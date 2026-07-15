@@ -276,23 +276,15 @@ export async function rolloverDuePeriods(referenceDate: Date = nowInBrisbane()) 
     // if the cron missed several days (e.g. the app/server was down).
     const nextStart = periodStartFor(item.period_type, referenceDate);
 
-    const { error: insertError } = await db.from("items").insert({
-      user_id: item.user_id,
-      category_id: item.category_id,
-      title: item.title,
-      notes: item.notes,
-      period_type: item.period_type,
-      period_start: nextStart,
-      rolled_over_from_id: item.id,
-      sort_order: item.sort_order,
+    // Single atomic statement (see migration 0003) instead of a separate
+    // insert + update: if this call never lands (timeout, crash), the item
+    // is simply still 'pending' next run -- not copied but left un-marked,
+    // which used to spawn a fresh duplicate every day forever.
+    const { error: rolloverError } = await db.rpc("rollover_item", {
+      p_item_id: item.id,
+      p_next_period_start: nextStart,
     });
-    if (insertError) throw insertError;
-
-    const { error: updateError } = await db
-      .from("items")
-      .update({ status: "rolled_over" satisfies ItemStatus })
-      .eq("id", item.id);
-    if (updateError) throw updateError;
+    if (rolloverError) throw rolloverError;
 
     rolled += 1;
   }
