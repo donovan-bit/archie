@@ -134,6 +134,18 @@ export async function listItemsForPeriod(
   return data ?? [];
 }
 
+export async function getItem(userId: string, itemId: string): Promise<ItemRow | null> {
+  const db = supabaseAdmin();
+  const { data, error } = await db
+    .from("items")
+    .select("*")
+    .eq("id", itemId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 export async function getFocusItem(userId: string): Promise<ItemRow | null> {
   const db = supabaseAdmin();
   const { data, error } = await db

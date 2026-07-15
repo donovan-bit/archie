@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { signOut } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import { AssistantChat } from "@/components/dashboard/assistant-chat";
 
 export function DashboardShell({
   userName,
@@ -33,6 +34,7 @@ export function DashboardShell({
         </form>
       </header>
       {children}
+      <AssistantChat />
     </div>
   );
 }
